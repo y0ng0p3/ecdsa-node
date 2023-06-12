@@ -1,3 +1,6 @@
+const secp = require("ethereum-cryptography/secp256k1");
+const { keccak256 } = require("ethereum-cryptography/keccak");
+const { toHex, utf8ToBytes } = require("ethereum-cryptography/utils");
 const express = require("express");
 const app = express();
 const cors = require("cors");
@@ -7,9 +10,9 @@ app.use(cors());
 app.use(express.json());
 
 const balances = {
-  "0x1": 100,
-  "0x2": 50,
-  "0x3": 75,
+  "48a6772c61cf83ab07f4712c150598699bc0ea93": 100,
+  "48cd7b98450258cecad0c81f403e4966e530f3ad": 50,
+  "a53e566613fa9dedc3aceb58501dfed361c8fb36": 75,
 };
 
 app.get("/balance/:address", (req, res) => {
@@ -19,17 +22,25 @@ app.get("/balance/:address", (req, res) => {
 });
 
 app.post("/send", (req, res) => {
-  const { sender, recipient, amount } = req.body;
+  const { signature, recipient, amount } = req.body;
 
-  setInitialBalance(sender);
+  console.log(signature);
+
+  const hashMessage = keccak256(utf8ToBytes(`${amount} ${recipient}`));
+
+  const recoveredPublicKey = secp.recoverPublicKey(hashMessage, signature[0], signature[1]);
+  const recoveredAddress = keccak256(recoveredPublicKey.slice(1)).slice(-20);
+  console.log({ recoveredAddress });
+
+  setInitialBalance(recoveredAddress);
   setInitialBalance(recipient);
 
-  if (balances[sender] < amount) {
+  if (balances[recoveredAddress] < amount) {
     res.status(400).send({ message: "Not enough funds!" });
   } else {
-    balances[sender] -= amount;
+    balances[recoveredAddress] -= amount;
     balances[recipient] += amount;
-    res.send({ balance: balances[sender] });
+    res.send({ balance: balances[recoveredAddress] });
   }
 });
 
